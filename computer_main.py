@@ -1,40 +1,33 @@
 import speech_recognition as sr
-import os, time, random, wave, contextlib, re, pyowm, vw, pigpio
+import os, time, random, wave, contextlib, re, pyowm
 from gtts import gTTS
 from pygame import mixer
 from datetime import datetime
 from mutagen.mp3 import MP3
-from pixel_ring import pixel_ring
 from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
+#from pixel_ring import pixel_ring
+
 
 r = sr.Recognizer()
 mic = sr.Microphone()
 language = 'en'
-
 mixer.init()
 x = 0.5
 PlayingMusic = False
 reading = False
 
-MusicDir = "/home/pi/Home/Music//"
-HomeDir = "/home/pi/Home//"
-
-TX = 21
-pi = pigpio.pi()
-BPS = 2000
-tx = vw.tx(pi, TX, BPS) # Specify Pi, tx GPIO, and baud.
-
+MusicDir = "Music"
+HomeDir = ""
 
 owm = pyowm.OWM('0370ddfb83dfbb13c6c688d8a2cd5d1c')
 observation = owm.weather_at_coords(40.5123,-74.8593)
 
 
-
-def listen (duration): 
+def listen (): 
     with mic as source:
         audio = r.adjust_for_ambient_noise(source)
-        audio = r.listen(source, phrase_time_limit=duration)
+        audio = r.listen(source, phrase_time_limit=2)
     try:
         words = r.recognize_google(audio)
         return words
@@ -43,7 +36,6 @@ def listen (duration):
         return None
     except sr.UnknownValueError:
         return None
-        
 
 def respond(file): 
     if ".wav" in file:   
@@ -61,8 +53,7 @@ def respond(file):
         duration = mp3_file.info.length
         mixer.music.stop()
         mixer.music.load(file)
-        mixer.music.play()
-        
+        mixer.music.play()     
     return duration
         
 def find_weather():
@@ -78,7 +69,7 @@ def play_answer(text):
     myobj = gTTS(text=text, lang=language, slow=False)
     myobj.save("temp.mp3")
     sleep_time = respond("temp.mp3")
-    time.sleep(sleep_time)
+    time.sleep(sleep_time + 0.1)
     mixer.music.load("empty.mp3")
     os.remove("temp.mp3")    
 
@@ -93,54 +84,40 @@ def processText(text):
             action = z
         z=z+1
     print(action, maxScore)
-    if maxScore > 0:
-        return action
-    else:
-        return None    
-        
+    return action
 
-play_answer("ready")
+
+
 
 while 1: 
+    speech = listen()
     response = None
     action = None
-    if reading == False:
-        speech = listen(0.5)
+    reading = False
+
+    while reading == True:
+        action = processText(speech)
+        print("*")
 
     if re.search('mom', str(speech), re.IGNORECASE):
+       print("listening")
        reading = True
-
-    
-    if reading == True:
-        tempVolume = mixer.music.get_volume()
-        mixer.music.set_volume(0.1)
-        pi.write(26,1)
-        speech = listen(1)
-        mixer.music.set_volume(tempVolume)
-        action = processText(speech)
-        pi.write(26,0)
-        reading = False
-        if action == None:
-            play_answer("Sorry I did not understand")
   
     if action != None:
+        reading = False
         if action == 0:
             response = "LightsOn.wav"
-            tx.put("l")
         if action == 1:
             response = "LightsOff.wav"
-            tx.put("l")
         if action == 2:
             response = "LampOn.wav"
-            tx.put("o")
         if action == 3:
             response = "LampOff.wav"
-            tx.put("o")
         if action == 4:
             PlayingMusic = True
-        if action == 5:
+        if action ==5:
             x += 0.2
-            volume = x**2
+            volume == x**2
             mixer.music.set_volume(volume)
         if action == 6:
             x -= 0.2
@@ -151,14 +128,15 @@ while 1:
             mixer.music.stop()
         if action == 8:
             exit()
-        if action == 9:
+        if action ==9:
             wr = find_weather()
             play_answer("The temperature is {0} and the weather is {1}".format(wr["temp"], wr["status"])) 
-            
-    if response != None:
-        respond(response)
+
+        if response != None:
+            respond(response)
     if speech != None:
         print(speech)        
+        
 
     if PlayingMusic == True and mixer.music.get_busy() == False:
         songs = [f for f in os.listdir(MusicDir) if not f.startswith('desk')]
